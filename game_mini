@@ -2,6 +2,19 @@
 # Untuk tugas praktikum PBO
 # Fitur: Menu, OOP, Guard FOV (kiri/kanan), Dog AI, Key, Door, Score, Lives, Save/Load, Multi Level
 
+# Robbery Bob Mini Project (Python 3.11 + Tkinter)
+# Untuk tugas praktikum PBO
+# Fitur: Menu, OOP, Guard FOV (kiri/kanan), Dog AI, Key, Door, Score, Lives, Save/Load, Multi Level
+
+# Robbery Bob Mini Project (Python 3.11 + Tkinter)
+# Untuk tugas praktikum PBO
+# Fitur: Menu, OOP, Guard FOV (kiri/kanan), Dog AI, Key, Door, Score, Lives, Save/Load, Multi Level
+
+
+# Robbery Bob Mini Project (Python 3.11 + Tkinter)
+# Untuk tugas praktikum PBO
+# Fitur: Menu, OOP, Guard FOV (kiri/kanan), Dog AI, Key, Door, Score, Lives, Save/Load, Multi Level
+
 import tkinter as tk
 from tkinter import messagebox
 import json
@@ -193,7 +206,7 @@ class Game:
                          bg="#f0a500", fg="#1a1a2e", activebackground="#ffd166",
                          cursor="hand2", pady=6)
 
-        tk.Button(frame, text="▶  Main Baru", command=self.start_new,  **btn_style).pack(pady=5)
+        tk.Button(frame, text="▶️  Main Baru", command=self.start_new,  **btn_style).pack(pady=5)
         tk.Button(frame, text="📂 Load Game", command=self.load_game,  **btn_style).pack(pady=5)
         tk.Button(frame, text="✖  Keluar",    command=self.root.destroy, **btn_style).pack(pady=5)
 
@@ -322,6 +335,7 @@ class Game:
             self._next_level()
 
     def _next_level(self):
+        self.player.score += 500  # bonus level clear   
         self.level_index += 1
         if self.level_index >= len(LEVELS):
             messagebox.showinfo("🏆 Menang!", f"Game tamat!\nSkor: {self.player.score}")
@@ -336,17 +350,21 @@ class Game:
         self._cancel_loop()       # stop loop SEBELUM apapun
         self.root.unbind("<Key>") # stop input selama popup muncul
 
-        self.player.lives -= 1   # FIX: ini yang hilang dari refactor sebelumnya!
+        self.player.lives -= 1
+        self.player.score = max(0, self.player.score - 200)  # penalti -200, min 0
 
         if self.player.lives <= 0:
             messagebox.showerror("💀 Game Over", "Nyawa habis!")
             self.menu()
         else:
-            messagebox.showwarning("⚠️ Tertangkap!", f"Nyawa tersisa: {self.player.lives}")
+            messagebox.showwarning("⚠️ Tertangkap!", f"Nyawa tersisa: {self.player.lives}\n💸 Penalti: -200 poin")
             self.player.x = self.player.spawn_x
             self.player.y = self.player.spawn_y
-            self.player.has_key = False
-            self.load_level()
+            
+            self._is_caught = False  # reset flag untuk level berikutnya
+            self.root.bind("<Key>", self._on_key)  # re-enable input    
+
+            self._game_loop()  # restart loop untuk level ini (guard & dog mulai gerak lagi)
 
     # ── SAVE / LOAD ───────────────────────────
 
@@ -356,6 +374,8 @@ class Game:
             "lives":   self.player.lives,
             "score":   self.player.score,
             "has_key": self.player.has_key,
+             "loot": list(self.loot),
+             "key_pos": self.key_pos,
         }
         with open(SAVE_FILE, "w") as f:
             json.dump(data, f, indent=2)
@@ -370,6 +390,8 @@ class Game:
             self.player.lives   = data["lives"]
             self.player.score   = data["score"]
             self.player.has_key = data["has_key"]
+            self .loot = set(tuple(pos) for pos in data["loot"])
+            self.saved_key_pos = data["key_pos"]  # simpan posisi kunci dari save, nanti dipakai saat load_level
             self.load_level()
         except (FileNotFoundError, KeyError, json.JSONDecodeError):
             messagebox.showerror("Error", "Save game tidak ditemukan atau rusak.")
