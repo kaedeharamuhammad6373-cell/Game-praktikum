@@ -543,3 +543,6 @@ if __name__ == "__main__":
     root.configure(bg="#1a1a2e")
     Game(root)
     root.mainloop()
+
+
+#KELOMPOKEREN5
