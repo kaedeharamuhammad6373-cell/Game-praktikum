@@ -167,6 +167,7 @@ class Game:
         self.map_data: list[str] = []
         self.canvas: tk.Canvas | None = None
         self._loop_id: str | None = None
+        self._draw_loop_id: str | None = None
         self._is_caught: bool = False  # FIX: cegah double-trigger caught
 
         # FIX: ESC untuk keluar fullscreen / kembali ke menu
@@ -258,6 +259,7 @@ class Game:
         self.root.bind("<Key>", self._on_key)
         self._grace_ticks = 3   # 3 tick pertama musuh diam dulu (grace period)
         self._game_loop()
+        self._draw_loop()  # Draw loop terpisah ~60fps
 
     # ── UTILITAS ──────────────────────────────
 
@@ -276,6 +278,9 @@ class Game:
         if self._loop_id is not None:
             self.root.after_cancel(self._loop_id)
             self._loop_id = None
+        if self._draw_loop_id is not None:
+            self.root.after_cancel(self._draw_loop_id)
+            self._draw_loop_id = None
 
     # ── INPUT ─────────────────────────────────
 
@@ -351,7 +356,8 @@ class Game:
             self._is_caught = False  # reset flag untuk level berikutnya
             self.root.bind("<Key>", self._on_key)  # re-enable input    
 
-            self._game_loop()  # restart loop untuk level ini (guard & dog mulai gerak lagi)
+            self._game_loop()   # restart enemy loop
+            self._draw_loop()   # restart draw loop
 
     # ── SAVE / LOAD ───────────────────────────
 
@@ -491,11 +497,11 @@ class Game:
     # ── GAME LOOP ─────────────────────────────
 
     def _game_loop(self):
+        """Enemy update loop – berjalan setiap 300ms (terpisah dari draw loop)."""
         # Grace period: musuh diam dulu beberapa tick setelah level load
         if self._grace_ticks > 0:
             self._grace_ticks -= 1
-            self._draw()
-            self._loop_id = self.root.after(500, self._game_loop)
+            self._loop_id = self.root.after(300, self._game_loop)
             return
 
         if self.guard:
@@ -506,7 +512,7 @@ class Game:
                 self._caught()
                 return
 
-            # Player masuk FOV guard – FIX: pass game untuk line-of-sight check
+            # Player masuk FOV guard
             if self.guard.can_see(self.player, self):
                 self._caught()
                 return
@@ -517,8 +523,13 @@ class Game:
                 self._caught()
                 return
 
-        self._draw()
-        self._loop_id = self.root.after(500, self._game_loop)
+        self._loop_id = self.root.after(300, self._game_loop)
+
+    def _draw_loop(self):
+        """Draw loop – berjalan ~60fps, terpisah dari logika musuh."""
+        if self.canvas and self.player:
+            self._draw()
+        self._draw_loop_id = self.root.after(16, self._draw_loop)
 
 
 # ──────────────────────────────────────────────
