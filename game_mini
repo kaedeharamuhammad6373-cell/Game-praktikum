@@ -2,19 +2,6 @@
 # Untuk tugas praktikum PBO
 # Fitur: Menu, OOP, Guard FOV (kiri/kanan), Dog AI, Key, Door, Score, Lives, Save/Load, Multi Level
 
-# Robbery Bob Mini Project (Python 3.11 + Tkinter)
-# Untuk tugas praktikum PBO
-# Fitur: Menu, OOP, Guard FOV (kiri/kanan), Dog AI, Key, Door, Score, Lives, Save/Load, Multi Level
-
-# Robbery Bob Mini Project (Python 3.11 + Tkinter)
-# Untuk tugas praktikum PBO
-# Fitur: Menu, OOP, Guard FOV (kiri/kanan), Dog AI, Key, Door, Score, Lives, Save/Load, Multi Level
-
-
-# Robbery Bob Mini Project (Python 3.11 + Tkinter)
-# Untuk tugas praktikum PBO
-# Fitur: Menu, OOP, Guard FOV (kiri/kanan), Dog AI, Key, Door, Score, Lives, Save/Load, Multi Level
-
 import tkinter as tk
 from tkinter import messagebox
 import json
