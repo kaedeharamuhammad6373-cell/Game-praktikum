@@ -20,7 +20,6 @@ except ImportError:
 def play_beep(sound_type: str):
     def sound_task():
         try:
-            # Jika dijalankan di MacOS (MacBook)
             if platform.system() == "Darwin":
                 if sound_type == "loot":
                     os.system("afplay /System/Library/Sounds/Pop.aiff")
@@ -32,7 +31,6 @@ def play_beep(sound_type: str):
                     os.system("afplay /System/Library/Sounds/Basso.aiff")
                 elif sound_type == "win":
                     os.system("afplay /System/Library/Sounds/Hero.aiff")
-            # Jika dijalankan di Windows
             elif HAS_WINSOUND:
                 if sound_type == "loot":
                     winsound.Beep(1500, 80)
@@ -46,11 +44,28 @@ def play_beep(sound_type: str):
                     winsound.Beep(400, 200)
                     winsound.Beep(300, 300)
                 elif sound_type == "win":
-                    for f in [523, 659, 784, 1046]:  # Nada do-mi-sol-do atas
+                    for f in [523, 659, 784, 1046]:
                         winsound.Beep(f, 150)
         except:
             pass
     threading.Thread(target=sound_task, daemon=True).start()
+
+def play_bgm():
+    # Cari bgm.wav di folder yang sama dengan script ini
+    bgm_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bgm.wav")
+    if not os.path.exists(bgm_file):
+        print(f"[BGM] File tidak ditemukan: {bgm_file}")
+        return
+    try:
+        if platform.system() == "Darwin":
+            def mac_bgm():
+                while True:
+                    os.system(f"afplay \"{bgm_file}\"")
+            threading.Thread(target=mac_bgm, daemon=True).start()
+        elif HAS_WINSOUND:
+            winsound.PlaySound(bgm_file, winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP)
+    except Exception as e:
+        print(f"[BGM] Gagal memutarkan: {e}")
 
 SAVE_FILE = "savegame.json"
 TILE = 40
@@ -228,6 +243,7 @@ class Game:
         self._is_caught: bool = False
 
         self.root.bind("<Escape>", lambda e: self.menu())
+        play_bgm()
         self.menu()
 
     # ── MENU ──────────────────────────────────
@@ -239,11 +255,9 @@ class Game:
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
 
-        # Canvas sebagai background biar bisa tambah efek
         bg_canvas = tk.Canvas(self.root, bg="#1a1a2e", highlightthickness=0)
         bg_canvas.place(x=0, y=0, width=sw, height=sh)
 
-        # Dekorasi: titik-titik bintang random
         import random
         for _ in range(80):
             rx = random.randint(0, sw)
@@ -252,11 +266,9 @@ class Game:
             alpha_color = random.choice(["#ffffff", "#f0a500", "#aaaaff", "#ffffff"])
             bg_canvas.create_oval(rx-r, ry-r, rx+r, ry+r, fill=alpha_color, outline="")
 
-        # Frame konten di atas canvas
         frame = tk.Frame(self.root, bg="#1a1a2e")
         frame.place(relx=0.5, rely=0.5, anchor="center")
 
-        # Ukuran font responsif
         title_fs = max(36, sw // 25)
         sub_fs   = max(13, sw // 90)
         btn_fs   = max(14, sw // 75)
@@ -264,7 +276,6 @@ class Game:
         btn_pady = max(12, sh // 55)
         gap      = max(8,  sh // 80)
 
-        # Judul
         tk.Label(
             frame, text="🕵️  ROBBERY BOB",
             font=("Arial", title_fs, "bold"),
@@ -277,7 +288,6 @@ class Game:
             fg="#aaaaaa", bg="#1a1a2e"
         ).pack(pady=(0, max(30, sh // 20)))
 
-        # Garis pemisah
         tk.Frame(frame, bg="#f0a500", height=2, width=btn_w * btn_fs).pack(pady=(0, max(20, sh // 30)))
 
         btn_style = dict(
@@ -294,7 +304,6 @@ class Game:
         tk.Button(frame, text="📂  Load Game", command=self.load_game,   **btn_style).pack(pady=gap)
         tk.Button(frame, text="✖   Keluar",   command=self.root.destroy, **btn_style).pack(pady=gap)
 
-        # Versi / credit kecil di bawah
         tk.Label(
             self.root,
             text="PBO Project  •  Python 3.11 + Tkinter",
@@ -340,8 +349,16 @@ class Game:
         self._is_caught = False
         self.guard = None
         self.dog = None
-        self.loot = set()
-        self.key_pos = None
+
+        # Restore loot & key dari save jika ada, otherwise parse dari map
+        restore_loot    = getattr(self, "_restore_loot",    None)
+        restore_key_pos = getattr(self, "_restore_key_pos", None)
+        restore_done    = getattr(self, "_restore_done",    False)
+
+        if not restore_done:
+            self.loot    = set()
+            self.key_pos = None
+
         self.door_pos = None
 
         for y, row in enumerate(self.map_data):
@@ -360,11 +377,21 @@ class Game:
                     case "H":
                         self.dog = Dog(x, y)
                     case "$":
-                        self.loot.add((x, y))
+                        if not restore_done:
+                            self.loot.add((x, y))
                     case "K":
-                        self.key_pos = (x, y)
+                        if not restore_done:
+                            self.key_pos = (x, y)
                     case "D":
                         self.door_pos = (x, y)
+
+        # Terapkan data restore jika baru load dari save
+        if restore_done:
+            self.loot    = restore_loot
+            self.key_pos = restore_key_pos
+            self._restore_loot    = None
+            self._restore_key_pos = None
+            self._restore_done    = False
 
         self.root.bind("<Key>", self._on_key)
         self._grace_ticks = 3
@@ -471,6 +498,7 @@ class Game:
             self._is_caught = False
             self.root.bind("<Key>", self._on_key)
 
+            self._grace_ticks = 3
             self._game_loop()
             self._draw_loop()
 
@@ -493,13 +521,20 @@ class Game:
         try:
             with open(SAVE_FILE) as f:
                 data = json.load(f)
+
             self.level_index = data["level"]
+
+            # Buat player sementara; posisi asli di-set saat load_level parsing 'P'
             self.player = Player(1, 1)
             self.player.lives   = data["lives"]
             self.player.score   = data["score"]
             self.player.has_key = data["has_key"]
-            self.loot = set(tuple(pos) for pos in data["loot"])
-            self.saved_key_pos = data["key_pos"]
+
+            # Simpan state restore untuk dipakai di load_level
+            self._restore_loot    = set(tuple(pos) for pos in data["loot"])
+            self._restore_key_pos = tuple(data["key_pos"]) if data["key_pos"] else None
+            self._restore_done    = True
+
             self.load_level()
         except (FileNotFoundError, KeyError, json.JSONDecodeError):
             messagebox.showerror("Error", "Save game tidak ditemukan atau rusak.")
@@ -653,4 +688,4 @@ if __name__ == "__main__":
     root.mainloop()
 
 
-#KELOMPOKEREN5
+#KELOMPOKKEREN5
