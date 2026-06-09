@@ -29,7 +29,7 @@ class Player(Character):
         self.lives = 3
         self.score = 0
         self.has_key = False
-        self.spawn_x = x   # FIX: simpan posisi spawn
+        self.spawn_x = x
         self.spawn_y = y
 
 
@@ -40,18 +40,16 @@ class Player(Character):
 class Guard(Character):
     def __init__(self, x: int, y: int):
         super().__init__(x, y)
-        self.dir = 1          # +1 = kanan, -1 = kiri
+        self.dir = 1
 
     def update(self, game: "Game"):
         nx = self.x + self.dir
         if not game.walkable(nx, self.y):
-            self.dir *= -1    # balik arah saat kena tembok
+            self.dir *= -1
         else:
             self.x = nx
 
     def fov_cells(self) -> list[tuple[int, int]]:
-        """Kembalikan sel di depan guard – HANYA sampai sebelum tembok."""
-        # FIX: FOV berhenti kalau kena tembok, tidak nembus
         cells = []
         for i in range(1, 4):
             cx = self.x + self.dir * i
@@ -60,12 +58,9 @@ class Guard(Character):
         return cells
 
     def can_see(self, player: Player, game: "Game") -> bool:
-        """Cek apakah player ada di FOV guard, dengan ray-cast sederhana."""
-        # FIX: cek line-of-sight; berhenti kalau ada tembok di antaranya
         for i in range(1, 4):
             cx = self.x + self.dir * i
             cy = self.y
-            # kalau sel ini tembok, FOV terblokir di sini
             if not game.walkable(cx, cy):
                 break
             if player.x == cx and player.y == cy:
@@ -78,14 +73,14 @@ class Guard(Character):
 # ──────────────────────────────────────────────
 
 class Dog(Character):
-    CHASE_RADIUS = 3   # dikurangin dari 4 biar lebih fair
+    CHASE_RADIUS = 3
 
     def update(self, game: "Game"):
         p = game.player
         dist = abs(p.x - self.x) + abs(p.y - self.y)
 
         if dist > self.CHASE_RADIUS:
-            return  # terlalu jauh, diam
+            return
 
         dx = 0
         dy = 0
@@ -105,7 +100,6 @@ class Dog(Character):
 #  LEVEL DATA
 # ──────────────────────────────────────────────
 
-# FIX: Level 3 diperbaiki – semua baris harus panjang yang sama (15 karakter)
 LEVELS: list[list[str]] = [
     [
         "###############",
@@ -131,12 +125,29 @@ LEVELS: list[list[str]] = [
         "######.####...#",
         "#...G.........#",
         "#......H......#",
-        "#....$.......##",  # FIX: dulu ada trailing char, sekarang konsisten 15 char tapi baris ini 16 -> disesuaikan
+        "#....$.......##",
+        "###############",
+    ],
+    [
+        "###############",
+        "#P....#..$...D#",
+        "#.###.#.###.#.#",
+        "#.$.#.#...#.#.#",
+        "#...#.G.K.#.#.#",
+        "#..H.#......#.#",
+        "###############",
+    ],
+    [
+        "###############",
+        "#P.$....#....D#",
+        "#.###G#.#.##..#",
+        "#.....#.#...G.#",
+        "#.###.#.#.###.#",
+        "#$..H.K.H...$.#",
         "###############",
     ],
 ]
 
-# Validasi panjang baris saat startup (opsional, untuk debug)
 for lvl_i, lvl in enumerate(LEVELS):
     expected = len(lvl[0])
     for row_i, row in enumerate(lvl):
@@ -145,8 +156,8 @@ for lvl_i, lvl in enumerate(LEVELS):
         )
 
 TILE_COLORS = {
-    "#": "#2a2a2a",   # tembok
-    ".": "#f5f0e8",   # lantai
+    "#": "#2a2a2a",
+    ".": "#f5f0e8",
 }
 
 
@@ -168,11 +179,9 @@ class Game:
         self.canvas: tk.Canvas | None = None
         self._loop_id: str | None = None
         self._draw_loop_id: str | None = None
-        self._is_caught: bool = False  # FIX: cegah double-trigger caught
+        self._is_caught: bool = False
 
-        # FIX: ESC untuk keluar fullscreen / kembali ke menu
         self.root.bind("<Escape>", lambda e: self.menu())
-
         self.menu()
 
     # ── MENU ──────────────────────────────────
@@ -181,22 +190,71 @@ class Game:
         self._cancel_loop()
         self._clear_window()
 
-        frame = tk.Frame(self.root, bg="#1a1a2e", padx=40, pady=40)
-        frame.pack(fill="both", expand=True)
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+
+        # Canvas sebagai background biar bisa tambah efek
+        bg_canvas = tk.Canvas(self.root, bg="#1a1a2e", highlightthickness=0)
+        bg_canvas.place(x=0, y=0, width=sw, height=sh)
+
+        # Dekorasi: titik-titik bintang random
+        import random
+        for _ in range(80):
+            rx = random.randint(0, sw)
+            ry = random.randint(0, sh)
+            r  = random.randint(1, 3)
+            alpha_color = random.choice(["#ffffff", "#f0a500", "#aaaaff", "#ffffff"])
+            bg_canvas.create_oval(rx-r, ry-r, rx+r, ry+r, fill=alpha_color, outline="")
+
+        # Frame konten di atas canvas
+        frame = tk.Frame(self.root, bg="#1a1a2e")
+        frame.place(relx=0.5, rely=0.5, anchor="center")
+
+        # Ukuran font responsif
+        title_fs = max(36, sw // 25)
+        sub_fs   = max(13, sw // 90)
+        btn_fs   = max(14, sw // 75)
+        btn_w    = max(22, sw // 38)
+        btn_pady = max(12, sh // 55)
+        gap      = max(8,  sh // 80)
+
+        # Judul
+        tk.Label(
+            frame, text="🕵️  ROBBERY BOB",
+            font=("Arial", title_fs, "bold"),
+            fg="#f0a500", bg="#1a1a2e"
+        ).pack(pady=(0, max(6, sh // 100)))
 
         tk.Label(
-            frame, text="🕵️ ROBBERY BOB",
-            font=("Arial", 28, "bold"),
-            fg="#f0a500", bg="#1a1a2e"
-        ).pack(pady=(10, 20))
+            frame, text="Curi semua, jangan ketangkep!",
+            font=("Arial", sub_fs, "italic"),
+            fg="#aaaaaa", bg="#1a1a2e"
+        ).pack(pady=(0, max(30, sh // 20)))
 
-        btn_style = dict(width=20, font=("Arial", 12), relief="flat",
-                         bg="#f0a500", fg="#1a1a2e", activebackground="#ffd166",
-                         cursor="hand2", pady=6)
+        # Garis pemisah
+        tk.Frame(frame, bg="#f0a500", height=2, width=btn_w * btn_fs).pack(pady=(0, max(20, sh // 30)))
 
-        tk.Button(frame, text="▶️  Main Baru", command=self.start_new,  **btn_style).pack(pady=5)
-        tk.Button(frame, text="📂 Load Game", command=self.load_game,  **btn_style).pack(pady=5)
-        tk.Button(frame, text="✖  Keluar",    command=self.root.destroy, **btn_style).pack(pady=5)
+        btn_style = dict(
+            width=btn_w,
+            font=("Arial", btn_fs, "bold"),
+            relief="flat",
+            bg="#f0a500", fg="#1a1a2e",
+            activebackground="#ffd166",
+            cursor="hand2",
+            pady=btn_pady,
+        )
+
+        tk.Button(frame, text="▶   Main Baru", command=self.start_new,   **btn_style).pack(pady=gap)
+        tk.Button(frame, text="📂  Load Game", command=self.load_game,   **btn_style).pack(pady=gap)
+        tk.Button(frame, text="✖   Keluar",   command=self.root.destroy, **btn_style).pack(pady=gap)
+
+        # Versi / credit kecil di bawah
+        tk.Label(
+            self.root,
+            text="PBO Project  •  Python 3.11 + Tkinter",
+            font=("Arial", max(9, sw // 130), "italic"),
+            fg="#555577", bg="#1a1a2e"
+        ).place(relx=0.5, rely=0.97, anchor="center")
 
     # ── SETUP LEVEL ───────────────────────────
 
@@ -206,6 +264,7 @@ class Game:
         self.load_level()
 
     def load_level(self):
+        global TILE
         self._cancel_loop()
         self._clear_window()
 
@@ -213,34 +272,39 @@ class Game:
         cols = len(self.map_data[0])
         rows = len(self.map_data)
 
+        HUD_H = 44
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        tile_w = sw // cols
+        tile_h = (sh - HUD_H) // rows
+        TILE = max(20, min(tile_w, tile_h))
+
+        cw = cols * TILE
+        ch = rows * TILE + HUD_H
+
         self.canvas = tk.Canvas(
             self.root,
-            width=cols * TILE,
-            height=rows * TILE + 44,
+            width=cw,
+            height=ch,
             bg="#1a1a2e",
             highlightthickness=0,
         )
-        self.canvas.pack()
+        self.canvas.pack(fill="both", expand=True)
 
-        # Reset entitas level
-        self._is_caught = False  # FIX: reset flag tiap level baru
+        self._is_caught = False
         self.guard = None
         self.dog = None
         self.loot = set()
         self.key_pos = None
         self.door_pos = None
 
-        spawn_x, spawn_y = 1, 1  # fallback spawn
-
         for y, row in enumerate(self.map_data):
             for x, ch in enumerate(row):
                 match ch:
                     case "P":
-                        spawn_x, spawn_y = x, y
                         if self.player is None:
                             self.player = Player(x, y)
                         else:
-                            # FIX: reset posisi & has_key saat load level (setelah mati)
                             self.player.x, self.player.y = x, y
                             self.player.has_key = False
                         self.player.spawn_x = x
@@ -257,9 +321,9 @@ class Game:
                         self.door_pos = (x, y)
 
         self.root.bind("<Key>", self._on_key)
-        self._grace_ticks = 3   # 3 tick pertama musuh diam dulu (grace period)
+        self._grace_ticks = 3
         self._game_loop()
-        self._draw_loop()  # Draw loop terpisah ~60fps
+        self._draw_loop()
 
     # ── UTILITAS ──────────────────────────────
 
@@ -291,7 +355,7 @@ class Game:
             case "Down"  | "s" | "S": dy =  1
             case "Left"  | "a" | "A": dx = -1
             case "Right" | "d" | "D": dx =  1
-            case "F5":
+            case "Shift_L":
                 self.save_game()
                 return
             case _:
@@ -327,7 +391,7 @@ class Game:
             self._next_level()
 
     def _next_level(self):
-        self.player.score += 500  # bonus level clear   
+        self.player.score += 500
         self.level_index += 1
         if self.level_index >= len(LEVELS):
             messagebox.showinfo("🏆 Menang!", f"Game tamat!\nSkor: {self.player.score}")
@@ -336,14 +400,14 @@ class Game:
             self.load_level()
 
     def _caught(self):
-        if self._is_caught:       # cegah double-trigger
+        if self._is_caught:
             return
         self._is_caught = True
-        self._cancel_loop()       # stop loop SEBELUM apapun
-        self.root.unbind("<Key>") # stop input selama popup muncul
+        self._cancel_loop()
+        self.root.unbind("<Key>")
 
         self.player.lives -= 1
-        self.player.score = max(0, self.player.score - 200)  # penalti -200, min 0
+        self.player.score = max(0, self.player.score - 200)
 
         if self.player.lives <= 0:
             messagebox.showerror("💀 Game Over", "Nyawa habis!")
@@ -352,12 +416,12 @@ class Game:
             messagebox.showwarning("⚠️ Tertangkap!", f"Nyawa tersisa: {self.player.lives}\n💸 Penalti: -200 poin")
             self.player.x = self.player.spawn_x
             self.player.y = self.player.spawn_y
-            
-            self._is_caught = False  # reset flag untuk level berikutnya
-            self.root.bind("<Key>", self._on_key)  # re-enable input    
 
-            self._game_loop()   # restart enemy loop
-            self._draw_loop()   # restart draw loop
+            self._is_caught = False
+            self.root.bind("<Key>", self._on_key)
+
+            self._game_loop()
+            self._draw_loop()
 
     # ── SAVE / LOAD ───────────────────────────
 
@@ -367,8 +431,8 @@ class Game:
             "lives":   self.player.lives,
             "score":   self.player.score,
             "has_key": self.player.has_key,
-             "loot": list(self.loot),
-             "key_pos": self.key_pos,
+            "loot":    list(self.loot),
+            "key_pos": self.key_pos,
         }
         with open(SAVE_FILE, "w") as f:
             json.dump(data, f, indent=2)
@@ -383,8 +447,8 @@ class Game:
             self.player.lives   = data["lives"]
             self.player.score   = data["score"]
             self.player.has_key = data["has_key"]
-            self .loot = set(tuple(pos) for pos in data["loot"])
-            self.saved_key_pos = data["key_pos"]  # simpan posisi kunci dari save, nanti dipakai saat load_level
+            self.loot = set(tuple(pos) for pos in data["loot"])
+            self.saved_key_pos = data["key_pos"]
             self.load_level()
         except (FileNotFoundError, KeyError, json.JSONDecodeError):
             messagebox.showerror("Error", "Save game tidak ditemukan atau rusak.")
@@ -395,92 +459,92 @@ class Game:
         c = self.canvas
         c.delete("all")
 
-        # Tile peta
+        cols = len(self.map_data[0])
+        rows = len(self.map_data)
+
+        fs_emoji  = max(10, TILE // 3)
+        fs_symbol = max(8,  TILE // 4)
+        fs_hud    = max(10, TILE // 4)
+        pad       = max(2,  TILE // 8)
+        center    = TILE // 2
+
         for y, row in enumerate(self.map_data):
             for x, ch in enumerate(row):
                 x1, y1 = x * TILE, y * TILE
                 color = TILE_COLORS.get(ch, TILE_COLORS["."])
                 c.create_rectangle(x1, y1, x1 + TILE, y1 + TILE, fill=color, outline="")
 
-        # Grid garis tipis supaya lebih rapi
-        cols = len(self.map_data[0])
-        rows = len(self.map_data)
         for i in range(cols + 1):
             c.create_line(i * TILE, 0, i * TILE, rows * TILE, fill="#ddd8cc", width=1)
         for j in range(rows + 1):
             c.create_line(0, j * TILE, cols * TILE, j * TILE, fill="#ddd8cc", width=1)
 
-        # Loot
         for lx, ly in self.loot:
+            margin = TILE // 4
             c.create_oval(
-                lx*TILE+12, ly*TILE+12,
-                lx*TILE+28, ly*TILE+28,
-                fill="#FFD700", outline="#B8860B", width=1,
+                lx*TILE+margin,      ly*TILE+margin,
+                lx*TILE+TILE-margin, ly*TILE+TILE-margin,
+                fill="#FFD700", outline="#B8860B", width=max(1, TILE//20),
             )
-            c.create_text(lx*TILE+20, ly*TILE+20, text="$",
-                          font=("Arial", 10, "bold"), fill="#8B6914")
+            c.create_text(lx*TILE+center, ly*TILE+center, text="$",
+                          font=("Arial", fs_symbol, "bold"), fill="#8B6914")
 
-        # Kunci
         if self.key_pos:
             kx, ky = self.key_pos
-            c.create_text(kx*TILE+20, ky*TILE+20, text="🔑", font=("Arial", 18))
+            c.create_text(kx*TILE+center, ky*TILE+center, text="🔑",
+                          font=("Arial", fs_emoji))
 
-        # Pintu
         if self.door_pos:
             dx, dy = self.door_pos
-            color = "#8B4513" if self.player.has_key and not self.loot else "#5C3317"
+            col_door = "#8B4513" if self.player.has_key and not self.loot else "#5C3317"
             c.create_rectangle(
-                dx*TILE+4,  dy*TILE+4,
-                dx*TILE+36, dy*TILE+36,
-                fill=color, outline="#3B1F0A", width=2,
+                dx*TILE+pad,       dy*TILE+pad,
+                dx*TILE+TILE-pad,  dy*TILE+TILE-pad,
+                fill=col_door, outline="#3B1F0A", width=max(1, TILE//20),
             )
-            c.create_text(dx*TILE+20, dy*TILE+20, text="🚪", font=("Arial", 16))
+            c.create_text(dx*TILE+center, dy*TILE+center, text="🚪",
+                          font=("Arial", fs_emoji))
 
-        # FOV Guard (sorotan merah muda) – FIX: hanya sampai sebelum tembok
         if self.guard:
             for fx, fy in self.guard.fov_cells():
-                if not (0 <= fy < len(self.map_data) and 0 <= fx < len(self.map_data[0])):
+                if not (0 <= fy < rows and 0 <= fx < cols):
                     break
                 if not self.walkable(fx, fy):
-                    break   # FIX: hentikan render FOV kalau kena tembok
+                    break
                 c.create_rectangle(
                     fx*TILE, fy*TILE, fx*TILE+TILE, fy*TILE+TILE,
                     fill="#ffb3b3", outline="", stipple="gray50",
                 )
-            # Tubuh guard
             gx, gy = self.guard.x, self.guard.y
             c.create_oval(
-                gx*TILE+6, gy*TILE+6,
-                gx*TILE+34, gy*TILE+34,
-                fill="#FF8C00", outline="#CC5500", width=2,
+                gx*TILE+pad,       gy*TILE+pad,
+                gx*TILE+TILE-pad,  gy*TILE+TILE-pad,
+                fill="#FF8C00", outline="#CC5500", width=max(1, TILE//20),
             )
             arrow = "→" if self.guard.dir > 0 else "←"
-            c.create_text(gx*TILE+20, gy*TILE+20, text=arrow,
-                          font=("Arial", 14, "bold"), fill="white")
+            c.create_text(gx*TILE+center, gy*TILE+center, text=arrow,
+                          font=("Arial", fs_symbol, "bold"), fill="white")
 
-        # Anjing
         if self.dog:
             hx, hy = self.dog.x, self.dog.y
             c.create_oval(
-                hx*TILE+6, hy*TILE+6,
-                hx*TILE+34, hy*TILE+34,
-                fill="#CC2200", outline="#880000", width=2,
+                hx*TILE+pad,       hy*TILE+pad,
+                hx*TILE+TILE-pad,  hy*TILE+TILE-pad,
+                fill="#CC2200", outline="#880000", width=max(1, TILE//20),
             )
-            c.create_text(hx*TILE+20, hy*TILE+20, text="🐕",
-                          font=("Arial", 14))
+            c.create_text(hx*TILE+center, hy*TILE+center, text="🐕",
+                          font=("Arial", fs_emoji))
 
-        # Player
         px, py = self.player.x, self.player.y
         c.create_oval(
-            px*TILE+6, py*TILE+6,
-            px*TILE+34, py*TILE+34,
-            fill="#1E90FF", outline="#0055AA", width=2,
+            px*TILE+pad,       py*TILE+pad,
+            px*TILE+TILE-pad,  py*TILE+TILE-pad,
+            fill="#1E90FF", outline="#0055AA", width=max(1, TILE//20),
         )
-        c.create_text(px*TILE+20, py*TILE+20, text="🕵️",
-                      font=("Arial", 14))
+        c.create_text(px*TILE+center, py*TILE+center, text="🕵️",
+                      font=("Arial", fs_emoji))
 
-        # HUD bawah
-        hud_y = rows * TILE + 22
+        hud_y = rows * TILE + (44 // 2)
         key_icon = "🔑" if self.player.has_key else "  "
         loot_left = len(self.loot)
         c.create_text(
@@ -489,16 +553,14 @@ class Game:
                   f"💰 {self.player.score}   "
                   f"{key_icon}   "
                   f"💎 {loot_left}   "
-                  f"F5=Simpan  ESC=Menu"),
+                  f"SHIFT KIRI=Simpan  ESC=Menu"),
             fill="white",
-            font=("Arial", 11, "bold"),
+            font=("Arial", fs_hud, "bold"),
         )
 
     # ── GAME LOOP ─────────────────────────────
 
     def _game_loop(self):
-        """Enemy update loop – berjalan setiap 300ms (terpisah dari draw loop)."""
-        # Grace period: musuh diam dulu beberapa tick setelah level load
         if self._grace_ticks > 0:
             self._grace_ticks -= 1
             self._loop_id = self.root.after(300, self._game_loop)
@@ -506,13 +568,9 @@ class Game:
 
         if self.guard:
             self.guard.update(self)
-
-            # Tabrakan langsung
             if self.player.x == self.guard.x and self.player.y == self.guard.y:
                 self._caught()
                 return
-
-            # Player masuk FOV guard
             if self.guard.can_see(self.player, self):
                 self._caught()
                 return
@@ -526,7 +584,6 @@ class Game:
         self._loop_id = self.root.after(300, self._game_loop)
 
     def _draw_loop(self):
-        """Draw loop – berjalan ~60fps, terpisah dari logika musuh."""
         if self.canvas and self.player:
             self._draw()
         self._draw_loop_id = self.root.after(16, self._draw_loop)
