@@ -5,6 +5,52 @@
 import tkinter as tk
 from tkinter import messagebox
 import json
+import threading
+import sys
+import os
+import platform
+
+# Mengatasi error di MacBook (karena winsound khusus untuk Windows)
+try:
+    import winsound
+    HAS_WINSOUND = True
+except ImportError:
+    HAS_WINSOUND = False
+
+def play_beep(sound_type: str):
+    def sound_task():
+        try:
+            # Jika dijalankan di MacOS (MacBook)
+            if platform.system() == "Darwin":
+                if sound_type == "loot":
+                    os.system("afplay /System/Library/Sounds/Pop.aiff")
+                elif sound_type == "key":
+                    os.system("afplay /System/Library/Sounds/Tink.aiff")
+                elif sound_type == "door":
+                    os.system("afplay /System/Library/Sounds/Glass.aiff")
+                elif sound_type == "caught":
+                    os.system("afplay /System/Library/Sounds/Basso.aiff")
+                elif sound_type == "win":
+                    os.system("afplay /System/Library/Sounds/Hero.aiff")
+            # Jika dijalankan di Windows
+            elif HAS_WINSOUND:
+                if sound_type == "loot":
+                    winsound.Beep(1500, 80)
+                elif sound_type == "key":
+                    winsound.Beep(800, 100)
+                    winsound.Beep(1200, 150)
+                elif sound_type == "door":
+                    winsound.Beep(1000, 100)
+                    winsound.Beep(1500, 200)
+                elif sound_type == "caught":
+                    winsound.Beep(400, 200)
+                    winsound.Beep(300, 300)
+                elif sound_type == "win":
+                    for f in [523, 659, 784, 1046]:  # Nada do-mi-sol-do atas
+                        winsound.Beep(f, 150)
+        except:
+            pass
+    threading.Thread(target=sound_task, daemon=True).start()
 
 SAVE_FILE = "savegame.json"
 TILE = 40
@@ -378,11 +424,13 @@ class Game:
         if pos in self.loot:
             self.loot.discard(pos)
             self.player.score += 100
+            play_beep("loot")
 
         if self.key_pos and pos == self.key_pos:
             self.player.has_key = True
             self.key_pos = None
             self.player.score += 250
+            play_beep("key")
 
         if (self.door_pos
                 and pos == self.door_pos
@@ -394,9 +442,11 @@ class Game:
         self.player.score += 500
         self.level_index += 1
         if self.level_index >= len(LEVELS):
+            play_beep("win")
             messagebox.showinfo("🏆 Menang!", f"Game tamat!\nSkor: {self.player.score}")
             self.menu()
         else:
+            play_beep("door")
             self.load_level()
 
     def _caught(self):
@@ -405,6 +455,7 @@ class Game:
         self._is_caught = True
         self._cancel_loop()
         self.root.unbind("<Key>")
+        play_beep("caught")
 
         self.player.lives -= 1
         self.player.score = max(0, self.player.score - 200)
